@@ -18,7 +18,7 @@ export async function assertFreshDatabase(db:IDBPDatabase<RitmoSchema>,get:(key:
   const generation=(await get('_generation'))?.value??'';
   if(generation!==(generations.get(db)??''))throw new Error('Los datos fueron restaurados en otra sesión. Recarga Ritmo antes de guardar cambios.');
 }
-export async function openDatabase(name = DATABASE_NAME): Promise<IDBPDatabase<RitmoSchema>> {
+export const openDatabase = async function (name = DATABASE_NAME): Promise<IDBPDatabase<RitmoSchema>> {
   const db = await openDB<RitmoSchema>(name, DATABASE_VERSION, {
     async upgrade(database, oldVersion, _version, tx) {
       if (oldVersion < 1) {
@@ -40,4 +40,5 @@ export async function openDatabase(name = DATABASE_NAME): Promise<IDBPDatabase<R
   });
   generations.set(db,(await db.get('settings','_generation'))?.value??'');
   return db;
-}
+};
+export const getDatabase = openDatabase;

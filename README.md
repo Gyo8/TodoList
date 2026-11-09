@@ -1,93 +1,56 @@
-# Ritmo
+# Ritmo 2.0 · Tu aplicación de tareas y hábitos
 
-Para continuar el proyecto con otra IA, empieza por [CONTINUIDAD-PARA-IA.md](CONTINUIDAD-PARA-IA.md): contexto, decisiones, arquitectura, historial, evidencia y próximos pasos.
+**Ritmo** es una aplicación personal de organización basada en el principio *"Un día a la vez"*. Combina prioridades diarias, gestión de tareas y seguimiento de hábitos con estadísticas justas, funcionando de manera **Offline-First** y con **sincronización automática en la nube** entre PC y móvil.
 
-Aplicación personal local, en construcción. Etapas 1–4: React, TypeScript, IndexedDB y una PWA con tareas, etiquetas, vistas guardadas, hábitos y respaldos.
+---
 
-## Ejecutar
+## 🚀 ¿Cómo usar Ritmo?
 
-Requiere Node.js compatible con la versión de Vite fijada en package-lock.json.
-
-```sh
-npm ci
-npm run dev
+### 1. En PC como Aplicación de Escritorio (Sin navegador)
+Para abrir Ritmo como programa de escritorio independiente en Windows:
+```bash
+npm start
 ```
+*O si ya compilaste:* `npm run desktop`
 
-Para comprobar la versión con funcionamiento sin conexión:
+Se abrirá una ventana de programa nativa con su propio icono, sin barras de navegación web ni puertos que recordar.
 
-```sh
-npm run build
-npm run preview
-```
+---
 
-Abrir http://127.0.0.1:4173. Esperar «Lista para usar sin conexión» antes de desconectar. El modo de desarrollo no activa el service worker. Usar siempre el mismo navegador, perfil y dirección: localhost, 127.0.0.1 y puertos diferentes tienen almacenamientos separados.
+### 2. En Móvil (Android Nativo)
+Ritmo está preparado con **Capacitor** para generar tu archivo `.apk` instalable:
+1. Para actualizar los archivos de la app hacia el proyecto Android:
+   ```bash
+   npm run mobile:sync
+   ```
+2. Para abrir el proyecto en Android Studio y generar el instalador APK:
+   ```bash
+   npm run mobile:open
+   ```
+   *(En Android Studio: Menú `Build` > `Build Bundle(s) / APK(s)` > `Build APK(s)`).*
 
-## Disponible
+---
 
-- Crear y editar tareas con notas, prioridad, fechas planeada/límite y duración estimada.
-- Completar/desmarcar, archivar/reactivar, papelera recuperable.
-- Etiquetas personalizadas con color; renombrarlas conserva sus relaciones.
-- Vistas iniciales, filtros combinables y vistas guardadas por nombre.
-- Hasta tres prioridades diarias y sección separada de vencidas, sin duplicados.
-- Guardado local transaccional y detección de ediciones desactualizadas.
-- Uso sin servidor comprobado en navegador: recargar, crear y volver a recargar conserva la tarea.
+### 3. Sincronización en la Nube (Gratis y Automática)
 
-Los respaldos están disponibles en Ajustes; la sincronización sigue pendiente. Borrar el almacenamiento del navegador elimina los datos locales: exporta y conserva una copia antes. La vista Todas muestra pendientes activas; el filtro Estado permite incluir completadas.
+Ritmo guarda **siempre primero en tu disco local** (IndexedDB):
+* Si no tienes conexión a internet, la app abre al instante y puedes crear tareas y marcar hábitos sin ningún tipo de bloqueo.
+* Para sincronizar tus datos entre tu PC y tu teléfono móvil:
+  1. Ve a la pestaña **Ajustes** dentro de la app.
+  2. En la sección **Sincronización en la Nube**, pega la configuración de tu proyecto gratuito de Firebase (o pulsa *Configurar Firebase*).
+  3. Inicia sesión con tu correo o crea tu cuenta.
+  4. ¡Listo! Los cambios que hagas en la PC se verán en tu celular en tiempo real, y viceversa.
 
-La sesión de comprobación se hizo en http://127.0.0.1:4174, separado del puerto habitual 4173 para no interferir con una instancia ya abierta. Los datos de prueba no se comparten entre esas direcciones. Para servir esa dirección: `npm run preview -- --port 4174`.
+---
 
-## Arquitectura
+## 🛠 Comandos disponibles
 
-- src/domain: tipos y reglas independientes de interfaz.
-- src/data: esquema versionado de IndexedDB y repositorio transaccional.
-- src/ui: interfaz y estados de guardado.
-- vite.config.ts: manifiesto y generación del service worker.
-
-La base usa versión 3; conserva tareas, etiquetas y vistas e incorpora hábitos. Cada hábito almacena sus versiones de frecuencia, periodos de pausa/archivo/papelera y fechas únicas de cumplimiento en un agregado transaccional. Se evita perder registros entre pestañas y se conservan los cálculos históricos. Se reservan identificadores, timestamps, revisión y campos de archivo/borrado; no constituyen sincronización.
-
-## Comprobaciones
-
-Revisión de dependencias: avisos moderados corregidos; quedan cuatro bajos derivados de deepmerge en herramientas de construcción. Detalle, override y límites en [SEGURIDAD-DEPENDENCIAS.md](SEGURIDAD-DEPENDENCIAS.md).
-
-```sh
-npm test
-npm run build
-```
-
-Treinta y una pruebas cubren reglas de hábitos, fechas, semanas parciales, estadísticas, migración, conflictos entre conexiones, organización de tareas, integridad de respaldos y recuperación ante fallos. Se verificaron guardado y exportación con servidor detenido; ver VALIDACION.md. El recorrido de uso real está en PRUEBA-PERSONAL.md.
-
-## Respaldos y preferencias
-
-En Ajustes, «Exportar respaldo completo» descarga un archivo JSON con tareas, hábitos, historial, etiquetas, vistas, prioridades diarias, archivo, papelera y preferencias. El formato tiene versión y admite hasta 10 MB. La fecha mostrada corresponde a la solicitud de descarga: comprueba que el archivo se guardó realmente.
-
-Para recuperar datos, selecciona el archivo, revisa su resumen y escribe RESTAURAR. La operación reemplaza la información de ese navegador; no mezcla dos conjuntos. Puedes exportar lo actual antes. Un archivo incompatible se rechaza antes de escribir y un fallo durante la escritura revierte la transacción completa. Cierra otras pestañas: las conexiones anteriores al reemplazo deben recargarse antes de volver a guardar.
-
-El respaldo contiene notas e historial sin cifrar; guárdalo en un lugar privado. No se envía a un servidor ni es una copia automática en internet. Hay un recordatorio discreto si nunca se exportó o han pasado siete días.
-
-Las preferencias incluyen apariencia clara, oscura o según el dispositivo, inicio de semana y zona horaria para nuevos hábitos. Los hábitos existentes conservan su calendario histórico.
-
-## Android e iPhone
-
-Para la primera prueba Android sin alojamiento, sigue [ANDROID-USB.md](ANDROID-USB.md). El comando `npm run preview:android` sirve la compilación en el puerto fijo 4180, solo en la PC; Chrome puede reenviarlo al teléfono por USB. La conexión y la instalación en dispositivo real siguen pendientes.
-
-La dirección de loopback anterior sirve únicamente en esta PC. Para probar en teléfono se necesitará alojamiento HTTPS o un entorno local seguro accesible desde el teléfono. No se ha publicado ni contratado ningún servicio. No se afirma compatibilidad o instalación en un dispositivo sin probarlo.
-
-## Referencias técnicas
-
-- https://vite.dev/guide/
-- https://vite-pwa-org.netlify.app/guide/
-
-Plan completo en REQUISITOS.md y PLAN-DE-CONSTRUCCION.md.
-
-## Hábitos disponibles
-
-- Días específicos o meta de 1–7 días distintos por semana.
-- Fecha de inicio, icono, color, descripción y etiqueta. Zona horaria e inicio de semana conservados con el hábito.
-- Registro desde Hoy, selector de fecha o calendario mensual; corrección de fechas pasadas elegibles.
-- Edición con control de versiones; frecuencia nueva desde la siguiente semana. Modalidad y fecha inicial quedan fijas para proteger el historial.
-- Pausa inmediata (mañana si hoy ya está marcado), reanudación, archivo y papelera recuperable. Programar una pausa futura personalizada queda pendiente.
-- Gráficas de seis semanas, resumen mensual y comparación de cuatro semanas cerradas con denominadores y avisos de pocos datos.
-- Metas flexibles: las semanas parciales se excluyen; el mes agrupa semanas completas cerradas cuyo último día cae en ese mes.
-- Mensajes breves de reconocimiento, sin IA externa. Graduación y premios avanzados siguen en el backlog.
-
-Prueba de hábitos aislada en http://127.0.0.1:4175 (`npm run preview -- --port 4175`). No comparte datos con 4173/4174.
+| Comando | Acción |
+| :--- | :--- |
+| `npm start` | Compila y abre la aplicación de escritorio en PC. |
+| `npm run desktop` | Abre la ventana de escritorio directamente. |
+| `npm run mobile:sync` | Sincroniza la versión más reciente con el proyecto nativo de Android. |
+| `npm run mobile:open` | Abre el proyecto en Android Studio para compilar el APK. |
+| `npm run dev` | Servidor web local de desarrollo. |
+| `npm test` | Ejecuta las 31 pruebas automatizadas de lógica de hábitos, tareas y respaldos. |
+| `npm run build` | Compila el bundle de producción en menos de 1 segundo. |

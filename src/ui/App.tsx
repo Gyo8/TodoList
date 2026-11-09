@@ -1,24 +1,259 @@
-import {useEffect,useState} from 'react';
-import {useRegisterSW} from 'virtual:pwa-register/react';
-import {TaskWorkspace} from './TaskWorkspace';
-import {HabitWorkspace} from './HabitWorkspace';
-import {BackupSettings} from './BackupSettings';
-import {loadPreferences} from '../data/preferences';
-type Page='Hoy'|'Tareas'|'Hábitos'|'Ajustes';
-export function App(){
-  const [page,setPage]=useState<Page>('Hoy'),[dirty,setDirty]=useState(false),[habitDirty,setHabitDirty]=useState(false),[online,setOnline]=useState(navigator.onLine),[cached,setCached]=useState(false),[error,setError]=useState('');
-  const [sessionId]=useState(()=>crypto.randomUUID());
-  const [epoch,setEpoch]=useState(0),[backupBusy,setBackupBusy]=useState(false),[backupDirty,setBackupDirty]=useState(false),[restored,setRestored]=useState('');
-  useEffect(()=>{const media=window.matchMedia('(prefers-color-scheme: dark)');const apply=()=>{void loadPreferences().then(p=>{document.documentElement.dataset.theme=p.theme==='system'?(media.matches?'dark':'light'):p.theme;}).catch(()=>setError('No se pudieron aplicar las preferencias.'));};apply();media.addEventListener('change',apply);window.addEventListener('ritmo:preferences',apply);const channel='BroadcastChannel' in window?new BroadcastChannel('ritmo-data'):null;if(channel)channel.onmessage=e=>{if(e.data==='restored'||e.data?.type==='restored'&&e.data.source!==sessionId)setError('Los datos se restauraron en otra pestaña. Recarga antes de seguir; los formularios antiguos no se guardarán.');};return()=>{media.removeEventListener('change',apply);window.removeEventListener('ritmo:preferences',apply);channel?.close();};},[epoch,sessionId]);
-  const {offlineReady:[offlineReady],needRefresh:[needRefresh],updateServiceWorker}=useRegisterSW({onRegisterError(){setError('No se pudo preparar el uso sin conexión. Tus datos locales no se borraron.');}});
-  useEffect(()=>{let active=true;if(import.meta.env.PROD&&'serviceWorker' in navigator)void navigator.serviceWorker.ready.then(()=>{if(active)setCached(true);});const connection=()=>setOnline(navigator.onLine);window.addEventListener('online',connection);window.addEventListener('offline',connection);return()=>{active=false;window.removeEventListener('online',connection);window.removeEventListener('offline',connection);};},[]);
-  useEffect(()=>{const guard=(e:BeforeUnloadEvent)=>{if(dirty||habitDirty||backupBusy||backupDirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',guard);return()=>window.removeEventListener('beforeunload',guard);},[dirty,habitDirty,backupBusy,backupDirty]);
-  return <div className="app"><a className="skip-link" href="#contenido">Saltar al contenido</a><aside><a className="brand" href="#" onClick={e=>{e.preventDefault();setPage('Hoy');}}>ritmo<span>.</span></a><p className="tagline">Un día a la vez</p><nav aria-label="Principal">{(['Hoy','Tareas','Hábitos','Ajustes'] as Page[]).map((p,i)=><button key={p} aria-current={page===p?'page':undefined} onClick={()=>setPage(p)}><span aria-hidden="true">{['☀','☑','✿','⚙'][i]}</span>{p}</button>)}</nav><div className="sidebar-note"><span className="dot"/> Personal · Local<br/><small>Versión 0.4 · Respaldo local</small></div></aside><main id="contenido" tabIndex={-1}><header><div className="eyebrow">{new Intl.DateTimeFormat('es-MX',{weekday:'long',day:'numeric',month:'long'}).format(new Date())}</div><h1>{page==='Hoy'?'Haz espacio para lo importante.':page==='Tareas'?'Una cosa a la vez.':page==='Hábitos'?'La constancia se construye.':'A tu manera.'}</h1><p className="subtitle">{page==='Hoy'?'Elige hasta tres prioridades y empieza por una.':page==='Tareas'?'Menos en la cabeza. Más claridad para tu día.':page==='Hábitos'?'Pequeños pasos, descansos justos y progreso real.':'Tus etiquetas y tus datos, bajo tu control.'}</p></header>
-  <div className="connection"><span className="dot"/>{online?'Con conexión':'Sin conexión'} · {offlineReady||cached?'Lista para usar sin conexión':import.meta.env.DEV?'Vista de desarrollo':'Preparando acceso sin conexión…'}</div>
-  {needRefresh&&<div className="notice">Hay una versión nueva. Guarda o cancela los formularios antes de actualizar. <button disabled={dirty||habitDirty||backupBusy||backupDirty} onClick={()=>void updateServiceWorker(true)}>Actualizar</button></div>}{error&&<p className="error" role="alert">{error}</p>}
-  {restored&&<p className="notice" role="status">{restored}</p>}
-  <div hidden={page!=='Ajustes'}><BackupSettings sessionId={sessionId} key={'backup'+epoch} hasUnsaved={dirty||habitDirty} onBusy={setBackupBusy} onDirty={setBackupDirty} onRestored={()=>{setError('');setDirty(false);setHabitDirty(false);setBackupDirty(false);setEpoch(n=>n+1);setRestored('Respaldo restaurado. Se recuperaron los datos y sus relaciones.');}}/></div>
-  <TaskWorkspace key={'tasks'+epoch} page={page} onDirty={setDirty}/>
-  <HabitWorkspace key={'habits'+epoch} page={page} onDirty={setHabitDirty}/>
-  <footer>Guardado en este dispositivo · Sin sincronización</footer></main></div>;
+import React, { useState, useEffect, useCallback } from 'react';
+import { Navbar, type Page } from './components/Navbar';
+import { TodayView } from './views/TodayView';
+import { TasksView } from './views/TasksView';
+import { HabitsView } from './views/HabitsView';
+import { SettingsView } from './views/SettingsView';
+
+import { getDatabase } from '../data/database';
+import { taskRepository } from '../data/taskRepository';
+import { habitRepository } from '../data/habitRepository';
+import { organizerRepository } from '../data/organizerRepository';
+import { loadPreferences, savePreferences } from '../data/preferences';
+import { syncManager } from '../services/syncService';
+import { localDate, createTask, type Task } from '../domain/task';
+import type { Habit, HabitDraft } from '../domain/habit';
+import type { Tag } from '../domain/views';
+
+export function App() {
+  const [currentPage, setCurrentPage] = useState<Page>('Hoy');
+  const [theme, setTheme] = useState<string>('system');
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [focusTaskIds, setFocusTaskIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const today = localDate();
+
+  // Cargar datos desde la base de datos local
+  const loadData = useCallback(async () => {
+    try {
+      const db = await getDatabase();
+      const taskRepo = taskRepository(db);
+      const habitRepo = habitRepository(db);
+      const orgRepo = organizerRepository(db);
+      const prefs = await loadPreferences();
+
+      const [allTasks, allHabits, allTags, focusIds] = await Promise.all([
+        taskRepo.list(),
+        habitRepo.list(),
+        orgRepo.tags(),
+        orgRepo.focus(today),
+      ]);
+
+      setTasks(allTasks);
+      setHabits(allHabits);
+      setTags(allTags);
+      setFocusTaskIds(focusIds);
+      setTheme(prefs.theme);
+      applyTheme(prefs.theme);
+    } catch (err) {
+      console.error('Error cargando datos locales:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [today]);
+
+  const applyTheme = (themeValue: string) => {
+    const isDark =
+      themeValue === 'dark' ||
+      (themeValue === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = isDark ? 'dark' : 'light';
+  };
+
+  useEffect(() => {
+    // Inicializar sincronización en segundo plano
+    syncManager.init().catch(console.error);
+
+    // Carga inicial
+    loadData();
+
+    // Escuchar eventos de cambio de datos (desde Firestore u otra pestaña)
+    const handleDataChanged = () => {
+      loadData();
+    };
+    window.addEventListener('ritmo:data-changed', handleDataChanged);
+
+    // Escuchar cambios de preferencia de sistema operativo
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleMediaChange = () => {
+      if (theme === 'system') applyTheme('system');
+    };
+    media.addEventListener('change', handleMediaChange);
+
+    return () => {
+      window.removeEventListener('ritmo:data-changed', handleDataChanged);
+      media.removeEventListener('change', handleMediaChange);
+    };
+  }, [loadData, theme]);
+
+  // Manejar cambio de tema
+  const handleThemeChange = async (newTheme: string) => {
+    setTheme(newTheme);
+    applyTheme(newTheme);
+    await savePreferences({ theme: newTheme as any });
+  };
+
+  const handleToggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    handleThemeChange(next);
+  };
+
+  // Acciones de Tareas
+  const handleToggleTask = async (id: string, completed: boolean) => {
+    const db = await getDatabase();
+    await taskRepository(db).setCompleted(id, completed);
+    await loadData();
+  };
+
+  const handleToggleFocus = async (date: string, taskId: string) => {
+    const db = await getDatabase();
+    await organizerRepository(db).toggleFocus(date, taskId);
+    await loadData();
+  };
+
+  const handleAddTask = async (data: any) => {
+    const db = await getDatabase();
+    const newTask = createTask(data.title, data.priority, data.plannedDate);
+    newTask.notes = data.notes;
+    newTask.dueDate = data.dueDate;
+    newTask.tagIds = data.tagIds;
+    await taskRepository(db).add(newTask);
+    await loadData();
+  };
+
+  const handleEditTask = async (id: string, draft: any, revision: number) => {
+    const db = await getDatabase();
+    await taskRepository(db).edit(id, draft, revision);
+    await loadData();
+  };
+
+  const handleSetTaskStatus = async (
+    id: string,
+    status: 'archive' | 'trash' | 'restore' | 'unarchive'
+  ) => {
+    const db = await getDatabase();
+    await taskRepository(db).setStatus(id, status);
+    await loadData();
+  };
+
+  // Acciones de Hábitos
+  const handleRecordHabit = async (habitId: string, date: string, done: boolean) => {
+    const db = await getDatabase();
+    await habitRepository(db).record(habitId, date, done);
+    await loadData();
+  };
+
+  const handleAddHabit = async (draft: HabitDraft) => {
+    const db = await getDatabase();
+    await habitRepository(db).add(draft);
+    await loadData();
+  };
+
+  const handleEditHabit = async (id: string, draft: HabitDraft, revision: number) => {
+    const db = await getDatabase();
+    await habitRepository(db).edit(id, draft, revision);
+    await loadData();
+  };
+
+  const handleHabitStatus = async (id: string, action: any) => {
+    const db = await getDatabase();
+    await habitRepository(db).status(id, action);
+    await loadData();
+  };
+
+  // Acciones de Etiquetas
+  const handleAddTag = async (name: string, color: string) => {
+    const db = await getDatabase();
+    await organizerRepository(db).saveTag({
+      id: crypto.randomUUID(),
+      name,
+      color,
+    });
+    await loadData();
+  };
+
+  const handleDeleteTag = async (id: string) => {
+    const db = await getDatabase();
+    await organizerRepository(db).deleteTag(id);
+    await loadData();
+  };
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: 'grid',
+          placeContent: 'center',
+          height: '100vh',
+          color: 'var(--text-muted)',
+          fontSize: '0.95rem',
+        }}
+      >
+        Iniciando Ritmo…
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-container">
+      <Navbar
+        currentPage={currentPage}
+        onPageChange={setCurrentPage}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+      />
+
+      <main className="main-wrapper">
+        {currentPage === 'Hoy' && (
+          <TodayView
+            tasks={tasks}
+            habits={habits}
+            tags={tags}
+            focusTaskIds={focusTaskIds}
+            onToggleTask={handleToggleTask}
+            onToggleFocus={handleToggleFocus}
+            onRecordHabit={handleRecordHabit}
+            onAddTask={handleAddTask}
+            onAddHabit={handleAddHabit}
+          />
+        )}
+
+        {currentPage === 'Tareas' && (
+          <TasksView
+            tasks={tasks}
+            tags={tags}
+            focusTaskIds={focusTaskIds}
+            onToggleTask={handleToggleTask}
+            onToggleFocus={handleToggleFocus}
+            onAddTask={handleAddTask}
+            onEditTask={handleEditTask}
+            onSetStatus={handleSetTaskStatus}
+          />
+        )}
+
+        {currentPage === 'Hábitos' && (
+          <HabitsView
+            habits={habits}
+            onRecordHabit={handleRecordHabit}
+            onAddHabit={handleAddHabit}
+            onEditHabit={handleEditHabit}
+            onHabitStatus={handleHabitStatus}
+          />
+        )}
+
+        {currentPage === 'Ajustes' && (
+          <SettingsView
+            tags={tags}
+            theme={theme}
+            onThemeChange={handleThemeChange}
+            onAddTag={handleAddTag}
+            onDeleteTag={handleDeleteTag}
+            onDataRestored={loadData}
+          />
+        )}
+      </main>
+    </div>
+  );
 }
