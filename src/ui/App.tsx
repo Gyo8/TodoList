@@ -3,6 +3,8 @@ import { Navbar, type Page } from './components/Navbar';
 import { TodayView } from './views/TodayView';
 import { TasksView } from './views/TasksView';
 import { HabitsView } from './views/HabitsView';
+import { RoutinesView } from './views/RoutinesView';
+import { PantryView } from './views/PantryView';
 import { SettingsView } from './views/SettingsView';
 
 import { getDatabase } from '../data/database';
@@ -217,6 +219,7 @@ export function App() {
             onRecordHabit={handleRecordHabit}
             onAddTask={handleAddTask}
             onAddHabit={handleAddHabit}
+            onNavigate={setCurrentPage}
           />
         )}
 
@@ -242,6 +245,10 @@ export function App() {
             onHabitStatus={handleHabitStatus}
           />
         )}
+
+        {currentPage === 'Rutinas' && <RoutinesView />}
+
+        {currentPage === 'Despensa & Pagos' && <PantryView />}
 
         {currentPage === 'Ajustes' && (
           <SettingsView

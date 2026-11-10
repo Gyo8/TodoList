@@ -4,7 +4,7 @@ import type { Habit } from '../../domain/habit';
 import type { Tag } from '../../domain/views';
 import { eligible, todayIn } from '../../domain/habit';
 import { localDate } from '../../domain/task';
-import { Plus, Star, CheckCircle2, Circle, AlertTriangle, Calendar, Flame } from 'lucide-react';
+import { Plus, Star, CheckCircle2, Circle, AlertTriangle, Calendar, Flame, Clock, ArrowRight } from 'lucide-react';
 import { TaskModal } from '../components/TaskModal';
 import { HabitModal } from '../components/HabitModal';
 
@@ -18,6 +18,7 @@ interface TodayViewProps {
   onRecordHabit: (habitId: string, date: string, done: boolean) => Promise<void>;
   onAddTask: (data: any) => Promise<void>;
   onAddHabit: (data: any) => Promise<void>;
+  onNavigate?: (page: any) => void;
 }
 
 export function TodayView({
@@ -30,6 +31,7 @@ export function TodayView({
   onRecordHabit,
   onAddTask,
   onAddHabit,
+  onNavigate,
 }: TodayViewProps) {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showHabitModal, setShowHabitModal] = useState(false);
@@ -91,6 +93,56 @@ export function TodayView({
           </div>
         </div>
       </header>
+
+      {/* SECCIÓN COMPACTA: RUTINA EN CURSO */}
+      <section style={{ marginBottom: '1.75rem' }}>
+        <div
+          className="card"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            padding: '0.85rem 1.15rem',
+            borderLeft: '4px solid var(--primary)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                backgroundColor: 'var(--primary-light)',
+                color: 'var(--primary)',
+                display: 'grid',
+                placeContent: 'center',
+              }}
+            >
+              <Clock size={18} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                Rutina en curso
+              </div>
+              <div style={{ fontWeight: 600, fontSize: '0.92rem', color: 'var(--text-primary)' }}>
+                Tu mapa del día está listo para orientarte
+              </div>
+            </div>
+          </div>
+
+          {onNavigate && (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => onNavigate('Rutinas')}
+              style={{ fontSize: '0.8rem' }}
+            >
+              Ver rutinas <ArrowRight size={14} />
+            </button>
+          )}
+        </div>
+      </section>
 
       {/* SECCIÓN 1: PRIORIDADES DEL DÍA (MÁXIMO 3) */}
       <section style={{ marginBottom: '2rem' }}>
